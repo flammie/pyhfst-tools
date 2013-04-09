@@ -8,14 +8,49 @@ import libhfst
 from argparse import ArgumentParser, FileType
 from sys import stderr, stdin, stdout, exit
 
+def take_greedy_lrlm_tokens(paths):
+    if len(paths) > 1:
+        tokenlength = 0
+        goodpaths = set(paths)
+        position = 0
+        while len(goodpaths) > 1:
+            longest = position
+            for path in paths:
+                tokenlength = path.output.find("@TOKEN@", position)
+                if tokenlength == -1:
+                    tokenlenght = len(path.output)
+                if tokenlength > longest:
+                    longest = tokenlength
+                    goodpaths = set([path])
+                elif tokenlength == longest:
+                    goodpaths.add(path)
+            position = longest
+        return goodpaths.pop().output.split("@TOKEN@")
+    elif len(paths) == 1:
+        return paths[0].output.split("@TOKEN@")
+    else:
+        return None
+
+
 def main():
-    a = ArgumentParser(description="HFST corpus handlings")
+    a = ArgumentParser(
+            description="Tokeniser for plain text data using HFST automata. "
+            "Takes a text stream input and outputs TSV token stream where "
+            "one line is one token. Tokens should include white-space tokens,"
+            "but this decision is solely up to output of used automata. "
+            "Some automata may be able to parse non-plain marked up text.",
+            epilog="If INFILE or OFILE is omitted, standard streams will be "
+            "used.\n"
+            "If DISAMB is omitted, greedy LRLM will be used.")
     a.add_argument('inputs', metavar='INFILE', type=open,
             nargs='*', help="Files to process with corpus tool")
-    a.add_argument('--output', '-o', metavar='OFILE', 
+    a.add_argument('--output', '-o', metavar='OFILE',
             type=FileType('w'), help="store result in OFILE")
     a.add_argument('--tokeniser', '-t', action='append', metavar='TFILE',
             help="Pre-process input stream with automata from TFILE")
+    a.add_argument('--disambiguation', '-d', metavar='DISAMB', 
+            choices=['LRLM'], default='LRLM',
+            help="use DISAMB tactic to select from multiple paths")
     a.add_argument("--verbose", '-v', action='store_true',
             help="print verbosely while processing")
     opts = a.parse_args()
@@ -35,7 +70,6 @@ def main():
             if opts.verbose:
                 print("Read tokeniser", t.get_property('name'))
             tokenisers.append(t)
-    print(opts.inputs, len(opts.inputs))
     if len(opts.inputs) < 1:
         if opts.verbose:
             print("Reading corpus data from <stdin>")
@@ -45,22 +79,31 @@ def main():
     hfst_tokeniser = libhfst.HfstTokenizer()
     for inputfile in opts.inputs:
         for line in inputfile:
+            line = line.strip('\n')
+            could_tokenise = False
             for tokeniser in tokenisers:
                 if tokeniser.get_type() == libhfst.TROPICAL_OPENFST_TYPE:
                     pathmaton = libhfst.HfstTransducer(line, hfst_tokeniser,
                             libhfst.TROPICAL_OPENFST_TYPE)
                     tokenisation = libhfst.extract_paths_fd(pathmaton.compose(tokeniser))
                     paths = libhfst.detokenize_paths(tokenisation)
-                    if len(paths) > 1:
-                        print("Ambiguous tokenisation", file=stderr)
-                    elif len(paths) == 1:
-                        tokens = paths[0].output.split("@TOKEN@")
-                        for token in tokens:
-                            print(token)
+                    tokens = None
+                    if opts.disambiguation == 'LRLM':
+                        tokens = take_greedy_lrlm_tokens(paths)
                     else:
-                        print("No tokens", file=stderr)
+                        print("What is this DISAMB?", opts.disambiguation,
+                                file=stderr)
+                    if tokens:
+                        for token in tokens:
+                            print(token.replace('@_EPSILON_SYMBOL_@', ''))
+                        break
+                    else:
+                        if opts.verbose:
+                            print("Got no tokens with FOO using",
+                                    opts.disambiguation)
                 else:
                     print("Not impl !OFST", file=stderr)
+                    exit(2)
     exit(0)
 
 
