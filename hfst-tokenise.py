@@ -55,6 +55,11 @@ def main():
             help="print verbosely while processing")
     opts = a.parse_args()
     tokenisers = list()
+    if not opts.output:
+        if opts.verbose:
+            print("printing output to stdout, disabling verbose", stderr)
+            opts.verbose = False
+        opts.output = stdout
     if not opts.tokeniser:
         if opts.verbose:
             print("Using Unicode tokeniser with character classes")
@@ -78,6 +83,10 @@ def main():
         print("Creating UTF-8 character tokeniser for HFST")
     hfst_tokeniser = libhfst.HfstTokenizer()
     for inputfile in opts.inputs:
+        print("# hfst-tokenise.py TSV token stream 1", file=opts.output)
+        print("# From input file", inputfile, file=opts.output)
+        print("# Next line is a header line", file=opts.output)
+        print("Token", file=opts.output)
         for line in inputfile:
             line = line.strip('\n')
             could_tokenise = False
@@ -96,6 +105,7 @@ def main():
                     if tokens:
                         for token in tokens:
                             print(token.replace('@_EPSILON_SYMBOL_@', ''))
+                        could_tokenise = True
                         break
                     else:
                         if opts.verbose:
@@ -104,6 +114,10 @@ def main():
                 else:
                     print("Not impl !OFST", file=stderr)
                     exit(2)
+            if not could_tokenise:
+                for token in line.split():
+                    print(token, file=opts.output)
+            print("\\n", file=opts.output)
     exit(0)
 
 
