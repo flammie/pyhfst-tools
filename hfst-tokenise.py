@@ -89,6 +89,9 @@ def main():
         print("Token", file=opts.output)
         for line in inputfile:
             line = line.strip('\n')
+            if not line or line == '':
+                print('\\n', file=opts.output)
+                continue
             could_tokenise = False
             for tokeniser in tokenisers:
                 if tokeniser.get_type() == libhfst.TROPICAL_OPENFST_TYPE:
